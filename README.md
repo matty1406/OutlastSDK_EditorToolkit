@@ -38,6 +38,8 @@ Development\Src\<Mod>\
     <Mod>.code-workspace         workspace, with Core/Engine/OLGame alongside
 ```
 
+A name that is not a valid package name is turned into one for you, so `my cool mod` becomes `MyCoolMod`. To rename a mod later, run `RenameMod.bat` at the engine root. It renames the folder, files, classes and registration, and you recompile afterwards. `DeleteMod.bat` removes a mod the same way, sending its folder and build to the Recycle Bin.
+
 Fill in the manifest and run `Compile.bat` while you work on it. To ship it, run `CompileRetail.bat`, then `Deploy.bat`. That is a mod. Deploy refuses a build that is not in retail format, since retail Outlast could not load it.
 
 ### The manifest

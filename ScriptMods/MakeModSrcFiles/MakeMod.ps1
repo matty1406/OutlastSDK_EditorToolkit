@@ -16,11 +16,14 @@
 
 .PARAMETER ModName
   Package name. Becomes the folder name, the script package name, and the .u
-  filename. Letters, digits and underscores only.
+  filename. Letters, digits and underscores; anything else is turned into
+  PascalCase, so "my cool mod" becomes "MyCoolMod". Defaults to $env:ModName,
+  which is how MakeMod.bat passes it.
 
 .PARAMETER Author
-  Your author name, as players see it. The mod's Id is namespaced by it, with
-  spaces and punctuation dropped: "Matty D." gives "MattyD.<ModName>".
+  Your author name, as players see it. The mod's Id is namespaced by its
+  PascalCase form: "Matty D." gives "MattyD.<ModName>". Defaults to
+  $env:ModAuthor.
 
 .PARAMETER EngineRoot
   Root of the UnrealEngine3 tree. Defaults to the parent of MakeModSrcFiles.
@@ -30,27 +33,33 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [string] $ModName,
+    [string] $ModName = $env:ModName,
 
-    [Parameter(Mandatory = $true)]
-    [string] $Author,
+    [string] $Author = $env:ModAuthor,
 
     [string] $EngineRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 )
 
 $ErrorActionPreference = 'Stop'
 
-if ($ModName -notmatch '^[A-Za-z][A-Za-z0-9_]*$') {
-    throw "Invalid mod name '$ModName'. Use letters, digits and underscores, starting with a letter."
+. (Join-Path $PSScriptRoot "ModNames.ps1")
+
+# An invalid name is fixed up rather than refused, and the user is told what it became.
+$Typed   = "$ModName".Trim()
+$ModName = ConvertTo-ModName $Typed
+if (-not $ModName) {
+    throw "'$Typed' has no letters to make a mod name from."
+}
+if ($ModName -cne $Typed) {
+    Write-Host "  '$Typed' is not a valid package name, using '$ModName'"
 }
 
 # The author lands inside an UnrealScript string literal, so quotes and backslashes
-# would break the manifest.
-$Author = $Author.Trim()
-$AuthorId = $Author -replace '[^A-Za-z0-9]', ''
-if ($Author -match '["\\]' -or -not $AuthorId) {
-    throw "Invalid author name '$Author'. It needs at least one letter or digit, and no quotes or backslashes."
+# are dropped rather than left to break the manifest.
+$Author   = ("$Author" -replace '["\\]', '').Trim()
+$AuthorId = ConvertTo-PascalCase $Author
+if (-not $AuthorId) {
+    throw "The author name needs at least one letter or digit."
 }
 
 $ModDir = Join-Path $EngineRoot "Development\Src\$ModName"

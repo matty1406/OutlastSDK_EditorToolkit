@@ -16,9 +16,11 @@ echo.
 
 echo [ScriptMods]
 copy /Y "%TK%ScriptMods\MakeMod.bat" "%ROOT%\" > nul
+copy /Y "%TK%ScriptMods\RenameMod.bat" "%ROOT%\" > nul
+copy /Y "%TK%ScriptMods\DeleteMod.bat" "%ROOT%\" > nul
 robocopy "%TK%ScriptMods\MakeModSrcFiles" "%ROOT%\MakeModSrcFiles" /E > nul
 if ERRORLEVEL 8 goto Failed
-echo   MakeMod.bat + MakeModSrcFiles\
+echo   MakeMod.bat + RenameMod.bat + DeleteMod.bat + MakeModSrcFiles\
 
 rem The SDK script package. Its sources go in the compile tree so you can read and
 rem rebuild them; the prebuilt .u means a mod compiles without rebuilding it first.
