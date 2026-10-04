@@ -1,0 +1,62 @@
+{
+	"folders": [
+		{
+			"name": "__MODNAME__",
+			"path": "."
+		},
+		{
+			"name": "OutlastSDK",
+			"path": "../OutlastSDK"
+		},
+		{
+			"name": "OLGame",
+			"path": "../OLGame"
+		},
+		{
+			"name": "UDKBase",
+			"path": "../UDKBase"
+		},
+		{
+			"name": "Engine",
+			"path": "../Engine"
+		},
+		{
+			"name": "Core",
+			"path": "../Core"
+		}
+	],
+	"settings": {
+		"unrealscript.indexAllDocuments": true,
+		"unrealscript.checkTypes": true,
+		"unrealscript.analyzeDocuments": "None",
+		"editor.codeActionsOnSave": null,
+		"files.associations": {
+			"*.uc": "unrealscript",
+			"*.uci": "unrealscript"
+		},
+		"unrealscript.macroSymbols": {
+			"debug": ""
+		},
+		"unrealscript.intrinsicSymbols": {
+			"Engine.Model": { "type": "class", "extends": "Object" },
+			"Engine.Mesh": { "type": "class", "extends": "Object" },
+			"Engine.MeshInstance": { "type": "class", "extends": "Object" },
+			"Engine.MeshAnimation": { "type": "class", "extends": "Object" },
+			"Engine.StaticMesh": { "type": "class", "extends": "Actor" },
+			"Engine.StaticMeshInstance": { "type": "class", "extends": "Actor" },
+			"Engine.ConvexVolume": { "type": "class", "extends": "Actor" },
+			"Engine.Level": { "type": "class", "extends": "Object" },
+			"Engine.NetConnection": { "type": "class", "extends": "Object" },
+			"Engine.Viewport": { "type": "class", "extends": "Object" },
+			"Engine.Primitive": { "type": "class", "extends": "Object" },
+			"Engine.Client": { "type": "class", "extends": "Object" },
+			"Engine.AudioSubsystem": { "type": "class", "extends": "Subsystem" },
+			"Engine.RenderDevice": { "type": "class", "extends": "Object" }
+		}
+	},
+	"extensions": {
+		"recommendations": [
+			"eliotvu.uc"
+		]
+	}
+}

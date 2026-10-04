@@ -1,0 +1,25 @@
+# Normalise line endings on commit, and check out what Windows expects.
+* text=auto
+
+# Compiled script package - must never be line-ending converted.
+*.u     binary
+*.upk   binary
+*.umap  binary
+*.dll   binary
+
+# Batch files are the ones that genuinely misbehave with LF: cmd can mis-parse
+# multi-line if blocks and goto targets. PowerShell is happy either way, but keep
+# it consistent since this toolkit is Windows-only.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+*.uc   text
+*.h    text
+*.cpp  text
+*.json text
+*.md   text
+*.ini  text
+
+# Generated from the game's reflection data. Collapsing it in diffs keeps pull
+# requests readable, and keeps 4.6 MB of C++ out of the language stats.
+NativeMods/include/ol/engine.h linguist-generated=true

@@ -1,0 +1,69 @@
+@echo off
+setlocal
+set ModName=__MODNAME__
+set EngineRoot=%~dp0..\..\..
+set OutDir=%~dp0Output\%ModName%
+
+rem These scripts find the engine by climbing out of Development\Src\__MODNAME__, so
+rem they only work from where MakeMod.bat put them. Say so plainly rather than
+rem letting cmd fail with "The system cannot find the path specified".
+if not exist "%EngineRoot%\Binaries\Win64\OLGame.com" (
+    echo This script has to stay in Development\Src\%ModName%\ inside the engine tree.
+    echo Looked for the engine at: %EngineRoot%
+    exit /b 1
+)
+
+if not exist "%EngineRoot%\OLGame\Script\%ModName%.u" (
+    echo %ModName%.u not found - run CompileRetail.bat first.
+    exit /b 1
+)
+
+rem Retail Outlast only loads packages stamped file version 867. A plain Compile.bat
+rem build carries this engine's own version, so refuse to package one.
+set "UPath=%EngineRoot%\OLGame\Script\%ModName%.u"
+powershell -NoProfile -Command "$b = New-Object byte[] 8; $f = [IO.File]::OpenRead($env:UPath); [void]$f.Read($b, 0, 8); $f.Close(); if ([BitConverter]::ToUInt16($b, 4) -ne 867) { exit 1 }"
+if ERRORLEVEL 1 (
+    echo %ModName%.u is not in retail format, so retail Outlast cannot load it.
+    echo Run CompileRetail.bat, then Deploy.bat again.
+    echo If CompileRetail.bat already ran, the Retail Package Patch is not built into this engine.
+    exit /b 1
+)
+
+echo -----------------
+echo -Packaging %ModName%
+echo -----------------
+echo.
+
+rem Start clean, so a file you renamed or deleted does not linger in Output.
+if exist "%OutDir%" rmdir /Q /S "%OutDir%"
+mkdir "%OutDir%"
+
+copy /Y "%EngineRoot%\OLGame\Script\%ModName%.u" "%OutDir%\" > nul
+if ERRORLEVEL 1 (
+    echo Failed to copy %ModName%.u
+    exit /b 1
+)
+echo   %ModName%.u
+
+rem Optional folders - packaged only if you actually made them.
+if exist "%~dp0Config" (
+    robocopy "%~dp0Config" "%OutDir%\Config" /E > nul
+    rem robocopy uses 0-7 for success, 8 and up for real failures.
+    if ERRORLEVEL 8 (
+        echo Failed to copy Config
+        exit /b 1
+    )
+    echo   Config\
+)
+
+if exist "%~dp0Localization" (
+    robocopy "%~dp0Localization" "%OutDir%\Localization" /E > nul
+    if ERRORLEVEL 8 (
+        echo Failed to copy Localization
+        exit /b 1
+    )
+    echo   Localization\
+)
+
+echo.
+echo Packaged to Output\%ModName%\

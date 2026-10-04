@@ -1,0 +1,8 @@
+# C++ mod support is not public yet.
+NativeMods/
+
+# Windows and editor cruft.
+Thumbs.db
+desktop.ini
+*.suo
+*.user

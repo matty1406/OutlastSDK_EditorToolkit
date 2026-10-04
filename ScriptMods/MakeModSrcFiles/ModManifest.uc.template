@@ -1,0 +1,47 @@
+//=============================================================================
+// __MODNAME__Manifest
+//
+// Every SDK script mod needs one of these. The SDK finds it by its PARENT class,
+// read straight out of the cooked .u without loading it, so it can list your mod
+// while it is still disabled.
+//
+// Fill in the defaults, put your setup in OnLoad, and that is a working mod.
+//=============================================================================
+class __MODNAME__Manifest extends SDKModManifest;
+
+/**
+ * Runs once when the SDK enables this mod. Do your setup here.
+ *
+ * Class swaps and game-class changes made here are tagged to this mod, so disabling
+ * it reverts them for you. Both take effect on the next map load.
+ */
+function OnLoad()
+{
+	// Example: replace the game type itself. This needs SDK_SetGameClass, since the
+	// game class is not a property SDK_SwapClass can set.
+	// class'OutlastSDKLibrary'.static.SDK_SetGameClass("__MODNAME__.__MODNAME__Game");
+}
+
+/**
+ * Runs once when the SDK disables this mod, while it is still live. Only undo
+ * things the SDK does not revert for you. Optional.
+ */
+function OnUnload()
+{
+}
+
+defaultproperties
+{
+	// SDKModId is namespaced by SDKModAuthor, so if you change one, change both. Two
+	// authors can then each ship a mod of the same name without clashing, and the
+	// SDK refuses a mod whose Id does not match its author.
+	SDKModId      = "__AUTHORID__.__MODNAME__"
+	SDKModVersion = "1.0"
+	SDKModName    = "__MODNAME__"
+	SDKModAuthor  = "__AUTHOR__"
+	SDKModOrder   = 100
+
+	// Mods this one cannot run without, each "Author.Id" or "Author.Id>=1.2". They
+	// are loaded first, so there is no load order to hand-tune.
+	// SDKModRequires(0) = "SomeoneElse.TheirLibrary"
+}
