@@ -6,8 +6,9 @@ Everything you need to build Outlast mods in the engine source tree, split by wh
 | --- | --- |
 | `ScriptMods\` | UnrealScript mods. MakeMod scaffolding plus the OutlastSDK script package. |
 | `NativeMods\` | C++ mods. MakeNativeMod scaffolding and the SDK headers. |
+| `CustomMaps\` | Maps. MakeMap scaffolding and a one-step cook for retail Outlast. |
 
-A mod can be either one, or both at once with C++ hosting the script half.
+A code mod can be script, C++, or both at once with C++ hosting the script half.
 
 > [!WARNING]
 > **C++ mods are not available yet.** `NativeMods\` is not included in this release, so only UnrealScript mods can be built for now. The C++ sections below describe what is coming.
@@ -61,6 +62,20 @@ Set the `SDKMod*` defaults for the name, version and author, and put your setup 
 - **`SDKModLibrary`** - a third class that ships here but is optional - it only matters for the uncommon case of a C++ mod exposing its own natives to its script half. Ignore it otherwise.
 
 Both the sources and a prebuilt `OutlastSDK.u` ship here. `Install.bat` puts the sources in the compile tree and the `.u` in `OLGame\Script\`, so your first mod compiles without rebuilding the SDK first. Edit the sources and recompile whenever you want to change it.
+
+## Quick start: map
+
+Run `MakeMap.bat` at the engine root and type a project name. You get:
+
+```
+OLGame\Content\CustomMaps\<Name>\    save your maps here
+CustomMaps\<Name>\
+    Cook.bat                         cook for retail Outlast
+    Map.ini                          where the output goes, and which maps to cook
+    Output\<Name>\                   the files to ship
+```
+
+Save your maps into the content folder and run `Cook.bat`. It finds your maps and cooks their sublevels with them, then copies out only what your maps use: the cooked maps, the texture caches they reference, and any of your own script packages (`.u`) they use, as long as those were built with `CompileRetail.bat`. Everything else the cooker writes is left out, and it refuses any map name retail Outlast already uses, since that would replace the game's own file.
 
 ## Quick start: C++ mod
 

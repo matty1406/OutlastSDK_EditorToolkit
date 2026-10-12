@@ -1,0 +1,37 @@
+@echo off
+rem Run the real work below as a nested call, then say plainly whether it worked and
+rem wait for a key, so a double-clicked window does not close before you can read it.
+rem Pass nopause to skip the wait; the VS Code terminal never pauses.
+if "%OLSDK_INNER%"=="1" goto :Main
+setlocal
+set OLSDK_INNER=1
+set NoPause=
+if /i "%TERM_PROGRAM%"=="vscode" set NoPause=1
+for %%a in (%*) do if /i "%%~a"=="nopause" set NoPause=1
+call "%~f0" %*
+set Result=%ERRORLEVEL%
+echo.
+if "%Result%"=="0" (
+    powershell -NoProfile -Command "Write-Host '==== __MAPNAME__ cook SUCCEEDED ====' -ForegroundColor Green"
+) else (
+    powershell -NoProfile -Command "Write-Host '==== __MAPNAME__ cook FAILED, see the messages above ====' -ForegroundColor Red"
+)
+if not defined NoPause pause
+exit /b %Result%
+
+:Main
+setlocal
+rem The engine is two folders up from CustomMaps\__MAPNAME__.
+for %%i in ("%~dp0..\..") do set "EngineRoot=%%~fi"
+
+if not exist "%EngineRoot%\MakeMapSrcFiles\CookMap.ps1" (
+    echo This script has to stay in CustomMaps\__MAPNAME__\ inside the engine tree, with the toolkit installed.
+    echo Looked for the engine at: %EngineRoot%
+    exit /b 1
+)
+
+echo -----------------------
+echo -Cooking __MAPNAME__
+echo -----------------------
+powershell -NoProfile -ExecutionPolicy Bypass -File "%EngineRoot%\MakeMapSrcFiles\CookMap.ps1" -Name __MAPNAME__ -EngineRoot "%EngineRoot%" -ProjectDir "%~dp0."
+exit /b %ERRORLEVEL%

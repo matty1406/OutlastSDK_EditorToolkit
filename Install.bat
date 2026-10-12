@@ -21,8 +21,10 @@ copy /Y "%TK%ScriptMods\RenameMod.bat" "%ROOT%\" > nul
 copy /Y "%TK%ScriptMods\DeleteMod.bat" "%ROOT%\" > nul
 robocopy "%TK%ScriptMods\MakeModSrcFiles" "%ROOT%\MakeModSrcFiles" /E > nul
 if ERRORLEVEL 8 goto Failed
-rem The manifest check is shared with NativeMods, so it lives in Shared; script mods call it from MakeModSrcFiles.
+rem The manifest check and name helpers are shared with the other sections, so they live in Shared.
 copy /Y "%TK%Shared\Check-ModManifest.ps1" "%ROOT%\MakeModSrcFiles\" > nul
+if ERRORLEVEL 1 goto Failed
+copy /Y "%TK%Shared\ModNames.ps1" "%ROOT%\MakeModSrcFiles\" > nul
 if ERRORLEVEL 1 goto Failed
 echo   MakeMod.bat + RenameMod.bat + DeleteMod.bat + MakeModSrcFiles\
 
@@ -38,12 +40,24 @@ if exist "%TK%ScriptMods\OutlastSDK\OutlastSDK.u" (
 )
 
 echo.
+echo [CustomMaps]
+copy /Y "%TK%CustomMaps\MakeMap.bat" "%ROOT%\" > nul
+if ERRORLEVEL 1 goto Failed
+robocopy "%TK%CustomMaps\MakeMapSrcFiles" "%ROOT%\MakeMapSrcFiles" /E > nul
+if ERRORLEVEL 8 goto Failed
+copy /Y "%TK%Shared\ModNames.ps1" "%ROOT%\MakeMapSrcFiles\" > nul
+if ERRORLEVEL 1 goto Failed
+copy /Y "%TK%Shared\Find-Outlast.ps1" "%ROOT%\MakeMapSrcFiles\" > nul
+if ERRORLEVEL 1 goto Failed
+echo   MakeMap.bat + MakeMapSrcFiles\
+
+echo.
 echo [Registering OutlastSDK with make]
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\MakeModSrcFiles\Register-Package.ps1" -EngineRoot "%ROOT%" -Package OutlastSDK
 if ERRORLEVEL 1 goto Failed
 
 echo.
-echo Done. Run MakeMod.bat at the engine root to create a mod.
+echo Done. Run MakeMod.bat at the engine root to create a script mod, or MakeMap.bat for a map.
 pause
 exit /b 0
 

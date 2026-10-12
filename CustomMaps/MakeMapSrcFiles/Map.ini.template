@@ -1,0 +1,15 @@
+[Map]
+; Where Cook.bat puts the finished files. Leave it empty for Output\__MAPNAME__ next to Cook.bat.
+; Set it to Game to copy them straight into your Outlast's CookedPCConsole folder for testing,
+; or to any other folder. A folder inside OLGame\Content is refused, since the editor would find the copies.
+Output=
+
+; The maps to cook, separated by commas. Leave it empty to cook every map in
+; OLGame\Content\CustomMaps\__MAPNAME__ that is not a sublevel of another one.
+; Sublevels are always cooked along with the map that streams them.
+Maps=
+
+; Cook refuses map names retail Outlast already uses, such as Intro_Persistent or X_Checkpoints,
+; since shipping them replaces the game's own files. Set this to True only for a total conversion
+; that is meant to replace them; the cook then warns instead.
+AllowRetailNames=False
