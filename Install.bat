@@ -36,6 +36,11 @@ echo   Development\Src\OutlastSDK\Classes\
 
 if exist "%TK%ScriptMods\OutlastSDK\OutlastSDK.u" (
     copy /Y "%TK%ScriptMods\OutlastSDK\OutlastSDK.u" "%ROOT%\OLGame\Script\" > nul
+    rem A download can give the .u the same date as its sources, which the editor reads as out of date.
+    rem copy /B with +,, stamps it with the current time instead.
+    pushd "%ROOT%\OLGame\Script"
+    copy /B OutlastSDK.u +,, > nul
+    popd
     echo   OLGame\Script\OutlastSDK.u  ^(prebuilt^)
 )
 
