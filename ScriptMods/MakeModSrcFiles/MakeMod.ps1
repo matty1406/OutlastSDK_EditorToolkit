@@ -106,6 +106,11 @@ foreach ($Template in $Templates) {
     $Body     = (Get-Content $SourcePath -Raw) -replace '__MODNAME__', $ModName
     $Body     = $Body.Replace('__AUTHORID__', $AuthorId).Replace('__AUTHOR__', $Author)
 
+    # cmd misreads goto and call targets in LF-only batch files, so a .bat always gets CRLF.
+    if ($DestPath -like '*.bat') {
+        $Body = $Body -replace '\r?\n', "`r`n"
+    }
+
     # -NoNewline so the files match the rest of the tree (no trailing blank line).
     Set-Content -Path $DestPath -Value $Body -Encoding ASCII -NoNewline
     Write-Host "  created  $($Template.To -replace '__MODNAME__', $ModName)"
@@ -122,6 +127,6 @@ Write-Host "  Mod Id     $AuthorId.$ModName"
 Write-Host "  Source     Development\Src\$ModName\Classes\$($ModName)Manifest.uc"
 Write-Host "  Output     OLGame\Script\$ModName.u"
 Write-Host "  Build      Development\Src\$ModName\Compile.bat        (normal engine version)"
-Write-Host "             Development\Src\$ModName\CompileRetail.bat  (867/3/10907, loads in retail Outlast)"
+Write-Host "             Development\Src\$ModName\CompileRetail.bat  (868/3/12046, loads in retail Outlast)"
 Write-Host "  Package    Development\Src\$ModName\Deploy.bat         (stages a retail build into Output\$ModName\)"
 Write-Host "  VS Code    Development\Src\$ModName\$ModName.code-workspace"

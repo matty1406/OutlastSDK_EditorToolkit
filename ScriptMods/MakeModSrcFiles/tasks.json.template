@@ -6,6 +6,7 @@
             "label": "Compile __MODNAME__",
             "type": "shell",
             "command": "${workspaceFolder}/Compile.bat",
+            "args": ["nopause"],
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -24,6 +25,7 @@
             "label": "Compile __MODNAME__ (retail format)",
             "type": "shell",
             "command": "${workspaceFolder}/CompileRetail.bat",
+            "args": ["nopause"],
             "group": "build",
             "presentation": {
                 "echo": true,
@@ -39,6 +41,7 @@
             "label": "Deploy __MODNAME__",
             "type": "shell",
             "command": "${workspaceFolder}/Deploy.bat",
+            "args": ["nopause"],
             "group": "build",
             "presentation": {
                 "echo": true,

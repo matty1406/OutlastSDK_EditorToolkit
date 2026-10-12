@@ -1,7 +1,30 @@
 @echo off
+rem Run the real work below as a nested call, then say plainly whether it worked and
+rem wait for a key, so a double-clicked window does not close before you can read it.
+rem The VS Code tasks pass nopause, and the VS Code terminal never pauses.
+if "%OLSDK_INNER%"=="1" goto :Main
+setlocal
+set OLSDK_INNER=1
+set NoPause=
+if /i "%TERM_PROGRAM%"=="vscode" set NoPause=1
+for %%a in (%*) do if /i "%%~a"=="nopause" set NoPause=1
+call "%~f0" %*
+set Result=%ERRORLEVEL%
+echo.
+if "%Result%"=="0" (
+    powershell -NoProfile -Command "Write-Host '==== __MODNAME__ deploy SUCCEEDED ====' -ForegroundColor Green"
+) else (
+    powershell -NoProfile -Command "Write-Host '==== __MODNAME__ deploy FAILED, see the messages above ====' -ForegroundColor Red"
+)
+if not defined NoPause pause
+exit /b %Result%
+
+:Main
 setlocal
 set ModName=__MODNAME__
-set EngineRoot=%~dp0..\..\..
+rem The engine is three folders up. Resolving it keeps the messages free of ..\ steps.
+for %%i in ("%~dp0..\..\..") do set "EngineRoot=%%~fi"
+set "UPath=%EngineRoot%\OLGame\Script\%ModName%.u"
 set OutDir=%~dp0Output\%ModName%
 
 rem These scripts find the engine by climbing out of Development\Src\__MODNAME__, so
@@ -13,34 +36,37 @@ if not exist "%EngineRoot%\Binaries\Win64\OLGame.com" (
     exit /b 1
 )
 
-if not exist "%EngineRoot%\OLGame\Script\%ModName%.u" (
-    echo %ModName%.u not found - run CompileRetail.bat first.
+echo -----------------
+echo -Packaging %ModName%
+echo -----------------
+echo Engine: %EngineRoot%
+echo.
+
+echo [1/2] Checking OLGame\Script\%ModName%.u
+if not exist "%UPath%" (
+    echo   %ModName%.u not found - run CompileRetail.bat first.
     exit /b 1
 )
 
-rem Retail Outlast only loads packages stamped file version 867. A plain Compile.bat
-rem build carries this engine's own version, so refuse to package one.
-set "UPath=%EngineRoot%\OLGame\Script\%ModName%.u"
-powershell -NoProfile -Command "$b = New-Object byte[] 8; $f = [IO.File]::OpenRead($env:UPath); [void]$f.Read($b, 0, 8); $f.Close(); if ([BitConverter]::ToUInt16($b, 4) -ne 867) { exit 1 }"
+rem Retail Outlast only loads packages stamped file version 868 (or 867, from older patch
+rem builds). A plain Compile.bat build carries this engine's own version, so refuse to package one.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%EngineRoot%\MakeModSrcFiles\Check-RetailFormat.ps1" -Package "%UPath%" -Classes "%~dp0Classes"
 if ERRORLEVEL 1 (
-    echo %ModName%.u is not in retail format, so retail Outlast cannot load it.
+    echo.
     echo Run CompileRetail.bat, then Deploy.bat again.
     echo If CompileRetail.bat already ran, the Retail Package Patch is not built into this engine.
     exit /b 1
 )
-
-echo -----------------
-echo -Packaging %ModName%
-echo -----------------
 echo.
 
+echo [2/2] Copying into Output\%ModName%
 rem Start clean, so a file you renamed or deleted does not linger in Output.
 if exist "%OutDir%" rmdir /Q /S "%OutDir%"
 mkdir "%OutDir%"
 
-copy /Y "%EngineRoot%\OLGame\Script\%ModName%.u" "%OutDir%\" > nul
+copy /Y "%UPath%" "%OutDir%\" > nul
 if ERRORLEVEL 1 (
-    echo Failed to copy %ModName%.u
+    echo   Failed to copy %ModName%.u
     exit /b 1
 )
 echo   %ModName%.u
@@ -50,7 +76,7 @@ if exist "%~dp0Config" (
     robocopy "%~dp0Config" "%OutDir%\Config" /E > nul
     rem robocopy uses 0-7 for success, 8 and up for real failures.
     if ERRORLEVEL 8 (
-        echo Failed to copy Config
+        echo   Failed to copy Config
         exit /b 1
     )
     echo   Config\
@@ -59,11 +85,13 @@ if exist "%~dp0Config" (
 if exist "%~dp0Localization" (
     robocopy "%~dp0Localization" "%OutDir%\Localization" /E > nul
     if ERRORLEVEL 8 (
-        echo Failed to copy Localization
+        echo   Failed to copy Localization
         exit /b 1
     )
     echo   Localization\
 )
 
 echo.
-echo Packaged to Output\%ModName%\
+echo Packaged to %OutDir%\
+rem robocopy leaves 1 behind when it copied files, so end on an explicit success.
+exit /b 0

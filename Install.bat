@@ -1,7 +1,8 @@
 @echo off
 setlocal
 set TK=%~dp0
-set ROOT=%~dp0..
+rem The engine root is one folder up, resolved so the messages show a plain path.
+for %%i in ("%~dp0..") do set "ROOT=%%~fi"
 
 if not exist "%ROOT%\Development\Src\Core\Classes" (
     echo This does not look like an UnrealEngine3 root: %ROOT%
@@ -20,6 +21,9 @@ copy /Y "%TK%ScriptMods\RenameMod.bat" "%ROOT%\" > nul
 copy /Y "%TK%ScriptMods\DeleteMod.bat" "%ROOT%\" > nul
 robocopy "%TK%ScriptMods\MakeModSrcFiles" "%ROOT%\MakeModSrcFiles" /E > nul
 if ERRORLEVEL 8 goto Failed
+rem The manifest check is shared with NativeMods, so it lives in Shared; script mods call it from MakeModSrcFiles.
+copy /Y "%TK%Shared\Check-ModManifest.ps1" "%ROOT%\MakeModSrcFiles\" > nul
+if ERRORLEVEL 1 goto Failed
 echo   MakeMod.bat + RenameMod.bat + DeleteMod.bat + MakeModSrcFiles\
 
 rem The SDK script package. Its sources go in the compile tree so you can read and
@@ -30,7 +34,7 @@ echo   Development\Src\OutlastSDK\Classes\
 
 if exist "%TK%ScriptMods\OutlastSDK\OutlastSDK.u" (
     copy /Y "%TK%ScriptMods\OutlastSDK\OutlastSDK.u" "%ROOT%\OLGame\Script\" > nul
-    echo   OLGame\Script\OutlastSDK.u  (prebuilt)
+    echo   OLGame\Script\OutlastSDK.u  ^(prebuilt^)
 )
 
 echo.

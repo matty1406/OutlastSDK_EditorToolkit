@@ -1,7 +1,30 @@
 @echo off
+rem Run the real work below as a nested call, then say plainly whether it worked and
+rem wait for a key, so a double-clicked window does not close before you can read it.
+rem The VS Code tasks pass nopause, and the VS Code terminal never pauses.
+if "%OLSDK_INNER%"=="1" goto :Main
+setlocal
+set OLSDK_INNER=1
+set NoPause=
+if /i "%TERM_PROGRAM%"=="vscode" set NoPause=1
+for %%a in (%*) do if /i "%%~a"=="nopause" set NoPause=1
+call "%~f0" %*
+set Result=%ERRORLEVEL%
+echo.
+if "%Result%"=="0" (
+    powershell -NoProfile -Command "Write-Host '==== __MODNAME__ compile SUCCEEDED ====' -ForegroundColor Green"
+) else (
+    powershell -NoProfile -Command "Write-Host '==== __MODNAME__ compile FAILED, see the messages above ====' -ForegroundColor Red"
+)
+if not defined NoPause pause
+exit /b %Result%
+
+:Main
 setlocal
 set ModName=__MODNAME__
-set EngineRoot=%~dp0..\..\..
+rem The engine is three folders up. Resolving it keeps the messages free of ..\ steps.
+for %%i in ("%~dp0..\..\..") do set "EngineRoot=%%~fi"
+set "UPath=%EngineRoot%\OLGame\Script\%ModName%.u"
 
 rem These scripts find the engine by climbing out of Development\Src\__MODNAME__, so
 rem they only work from where MakeMod.bat put them. Say so plainly rather than
@@ -12,6 +35,14 @@ if not exist "%EngineRoot%\Binaries\Win64\OLGame.com" (
     exit /b 1
 )
 
+echo -------------------
+echo -Compiling Scripts-
+echo -------------------
+echo Mod:    %ModName%
+echo Engine: %EngineRoot%
+echo.
+
+echo [1/2] Checking the manifest
 rem A mod with a manifest needs an Id, Name, Version and Author, and the Id must be
 rem namespaced by the Author. Check before cooking, so that costs a second here rather
 rem than a .u that compiles fine and then does not appear in the launcher.
@@ -23,30 +54,36 @@ if ERRORLEVEL 2 (
 ) else if ERRORLEVEL 1 (
     exit /b 1
 )
-
-echo -------------------
-echo -Compiling Scripts-
-echo -------------------
 echo.
 
+echo [2/2] Compiling scripts
 rem Delete our own .u so this package is always rebuilt from source. make would
 rem otherwise skip it whenever it judged it up to date, which is the usual reason a
 rem change appears to have no effect. It costs a couple of seconds for one package,
 rem and deliberately does NOT touch anything else - "make -full" would wipe every
 rem package in OLGame\Script, Core and Engine included.
-if exist "%EngineRoot%\OLGame\Script\%ModName%.u" del "%EngineRoot%\OLGame\Script\%ModName%.u"
+if exist "%UPath%" del "%UPath%"
 
 "%EngineRoot%\Binaries\Win64\OLGame.com" make -auto -NOPAUSEONSUCCESS
 
 if ERRORLEVEL 1 (
     echo.
-    echo Failed to compile %ModName%.
+    echo Failed to compile %ModName%. Fix the first error above, then run this again.
+    exit /b 1
+)
+
+rem make also succeeds when it never built this package, which happens when the mod
+rem is not registered with it. Check for the file rather than trusting the exit code.
+if not exist "%UPath%" (
+    echo.
+    echo make finished, but it did not write OLGame\Script\%ModName%.u.
+    echo %ModName% is probably not registered with make. From the engine root, run:
+    echo   powershell -ExecutionPolicy Bypass -File MakeModSrcFiles\Register-Package.ps1 -EngineRoot . -Package OutlastSDK,%ModName%
     exit /b 1
 )
 
 echo.
-echo %ModName% compiled to OLGame\Script\%ModName%.u
-echo.
+for %%i in ("%UPath%") do echo Output: OLGame\Script\%ModName%.u, %%~zi bytes, built %%~ti
 echo This build is for the editor only. To ship it, run CompileRetail.bat, then Deploy.bat.
 
 if defined NoManifest (
@@ -54,3 +91,4 @@ if defined NoManifest (
     echo Note: %ModName% has no SDKModManifest class, so it was built as a plain script package.
     echo That is fine for non-SDK mods, but the OutlastSDK needs a manifest to list and load a mod.
 )
+exit /b 0

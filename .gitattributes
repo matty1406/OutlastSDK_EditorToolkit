@@ -13,6 +13,9 @@
 *.bat text eol=crlf
 *.ps1 text eol=crlf
 
+# The batch templates become each mod's .bat files, so they need CRLF too.
+*.bat.template text eol=crlf
+
 *.uc   text
 *.h    text
 *.cpp  text

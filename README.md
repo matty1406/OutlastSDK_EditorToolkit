@@ -19,7 +19,7 @@ A mod can be either one, or both at once with C++ hosting the script half.
 
 ## Requires the [Outlast Retail Package Patch](https://github.com/matty1406/Outlast_Retail_Package_Patch)
 
-Install that [patch](https://github.com/matty1406/Outlast_Retail_Package_Patch) and rebuild the engine first. It adds the `-SaveAsRetail` switch, so without it `CompileRetail.bat` silently does nothing and your mods cannot be loaded by retail Outlast.
+Install that [patch](https://github.com/matty1406/Outlast_Retail_Package_Patch) and rebuild the engine first. It adds the `-SaveAsRetail` switch, so without it your mods cannot be loaded by retail Outlast and `CompileRetail.bat` stops with an error saying so.
 
 ## Install
 
@@ -79,7 +79,7 @@ NativeMods\Mods\<Mod>\
 
 Run `Build.bat`. It compiles your mod and copies the dll into the game's `Mods` folder. `Build.bat nodeploy` builds without installing.
 
-Your Outlast install is found automatically from Steam. For a non-Steam copy, set it once with `setx OUTLAST_DIR "C:\path\to\Outlast"`.
+Your Outlast install is found automatically from Steam, Epic or GOG. For anything else, set it once with `setx OUTLAST_DIR "C:\path\to\Outlast"`.
 
 ## Quick start: both together
 
@@ -110,9 +110,11 @@ Ship the dll, `mod.ini` and the `.u` together in the mod folder.
 
 - **Your mod shows up in the game's Mods menu** once it is in `OLGame\Mods\`, with its name, author, version and live state, and can be switched on and off from there. Anything that goes wrong loading it is reported there too, so check that before assuming the build failed.
 
+- **Every build script ends with a green SUCCEEDED or a red FAILED** and waits for a key, so a double-clicked window stays open until you have read it. Pass `nopause` to skip the wait. The VS Code tasks already do.
+
 - **Both build scripts rebuild only your package**, every time, so an edit never silently fails to take effect.
 
-- **`CompileRetail.bat` needs the [Retail Package Patch](https://github.com/matty1406/Outlast_Retail_Package_Patch) and a rebuilt engine.** Until then the switch is ignored and you get a normal package.
+- **`CompileRetail.bat` needs the [Retail Package Patch](https://github.com/matty1406/Outlast_Retail_Package_Patch) and a rebuilt engine.** Without it the switch is ignored, so the script reads the stamp back and fails rather than leave you a package retail cannot load.
 
 ## Licence
 
