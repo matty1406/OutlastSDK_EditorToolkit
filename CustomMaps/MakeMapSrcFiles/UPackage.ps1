@@ -31,6 +31,35 @@ namespace OutlastToolkit
         public string[] ClassPackages = new string[0];
     }
 
+    // One OLCheckpoint: its CheckpointName, and the persistent map it names ("" when it names none, so it
+    // belongs to the map it is in).
+    public class CheckpointEntry
+    {
+        public string Name;
+        public string PersistentLevel;
+    }
+
+    // The checkpoints a package holds, in the order they are stored, and the order its first
+    // OLCheckpointList gives.
+    public class CheckpointInfo
+    {
+        public CheckpointEntry[] Checkpoints = new CheckpointEntry[0];
+        public string[] ListOrder = new string[0];
+    }
+
+    // Where the tables are, and the compressed chunks that hold the rest.
+    class Header
+    {
+        public int NameCount;
+        public int NameOffset;
+        public int ExportCount;
+        public int ExportOffset;
+        public int ImportCount;
+        public int ImportOffset;
+        public int ChunkCount;
+        public int[,] Chunks;
+    }
+
     // The import table, kept just long enough to resolve where each import lives.
     class ImportTable
     {
@@ -65,11 +94,24 @@ namespace OutlastToolkit
             byte[] data = File.ReadAllBytes(path);
             UPackageInfo info = new UPackageInfo();
             info.Path = path;
+            Header h = ParseHeader(data, info);
+
+            if (readNames || readImports)
+            {
+                ReadTables(info, data, h.NameOffset, h.NameCount, h.ImportOffset, h.ImportCount, h.ExportOffset, h.ExportCount, h.Chunks, h.ChunkCount, readImports);
+            }
+
+            return info;
+        }
+
+        static Header ParseHeader(byte[] data, UPackageInfo info)
+        {
+            Header h = new Header();
             int p = 0;
 
             if (ReadU32(data, ref p) != PackageTag)
             {
-                throw new InvalidDataException(path + " is not an Unreal package.");
+                throw new InvalidDataException(info.Path + " is not an Unreal package.");
             }
 
             uint fileVersion = ReadU32(data, ref p);
@@ -81,13 +123,13 @@ namespace OutlastToolkit
             ReadFString(data, ref p, data.Length);
 
             info.PackageFlags = ReadU32(data, ref p);
-            int nameCount = ReadI32(data, ref p);
-            int nameOffset = ReadI32(data, ref p);
+            h.NameCount = ReadI32(data, ref p);
+            h.NameOffset = ReadI32(data, ref p);
 
-            int exportCount = ReadI32(data, ref p);
-            int exportOffset = ReadI32(data, ref p);
-            int importCount = ReadI32(data, ref p);
-            int importOffset = ReadI32(data, ref p);
+            h.ExportCount = ReadI32(data, ref p);
+            h.ExportOffset = ReadI32(data, ref p);
+            h.ImportCount = ReadI32(data, ref p);
+            h.ImportOffset = ReadI32(data, ref p);
 
             // Depends offset, import/export GUIDs, thumbnail table and package GUID.
             p += 4 + 12 + 4 + 16;
@@ -99,13 +141,13 @@ namespace OutlastToolkit
             p += 4;
             info.CompressionFlags = ReadU32(data, ref p);
 
-            int chunkCount = ReadI32(data, ref p);
-            int[,] chunks = new int[chunkCount, 4];
-            for (int i = 0; i < chunkCount; i++)
+            h.ChunkCount = ReadI32(data, ref p);
+            h.Chunks = new int[h.ChunkCount, 4];
+            for (int i = 0; i < h.ChunkCount; i++)
             {
                 for (int j = 0; j < 4; j++)
                 {
-                    chunks[i, j] = ReadI32(data, ref p);
+                    h.Chunks[i, j] = ReadI32(data, ref p);
                 }
             }
 
@@ -118,12 +160,143 @@ namespace OutlastToolkit
                 info.AdditionalPackagesToCook[i] = ReadFString(data, ref p, data.Length);
             }
 
-            if (readNames || readImports)
-            {
-                ReadTables(info, data, nameOffset, nameCount, importOffset, importCount, exportOffset, exportCount, chunks, chunkCount, readImports);
-            }
+            return h;
+        }
 
-            return info;
+        // The whole package, decompressed: every chunk, not just as far as the tables reach.
+        static byte[] Inflate(byte[] data, UPackageInfo info, Header h)
+        {
+            byte[] buffer = data;
+            if (info.CompressionFlags != 0 && h.ChunkCount > 0)
+            {
+                if (info.CompressionFlags != CompressLzo)
+                {
+                    throw new NotSupportedException(info.Path + " uses compression " + info.CompressionFlags + ", only LZO is supported.");
+                }
+
+                int total = 0;
+                for (int i = 0; i < h.ChunkCount; i++)
+                {
+                    total = Math.Max(total, h.Chunks[i, 0] + h.Chunks[i, 1]);
+                }
+
+                buffer = new byte[total];
+                Buffer.BlockCopy(data, 0, buffer, 0, Math.Min(h.Chunks[0, 0], data.Length));
+                for (int i = 0; i < h.ChunkCount; i++)
+                {
+                    DecompressChunk(data, h.Chunks[i, 2], buffer, h.Chunks[i, 0], h.Chunks[i, 1]);
+                }
+            }
+            return buffer;
+        }
+
+        // The OLCheckpoints a package holds and the order its OLCheckpointList puts them in. Read from each
+        // object's tagged properties, found by their tag, so an actor's own preamble does not have to be parsed.
+        public static CheckpointInfo ReadCheckpoints(string path)
+        {
+            byte[] data = File.ReadAllBytes(path);
+            UPackageInfo info = new UPackageInfo();
+            info.Path = path;
+            Header h = ParseHeader(data, info);
+            byte[] buffer = Inflate(data, info, h);
+
+            string[] names = ParseNames(buffer, buffer.Length, h.NameOffset, h.NameCount);
+            ImportTable imports = names != null ? ParseImports(buffer, buffer.Length, h.ImportOffset, h.ImportCount, names) : null;
+            CheckpointInfo result = new CheckpointInfo();
+
+            if (imports != null)
+            {
+                int cpName = Array.IndexOf(names, "CheckpointName");
+                int levelName = Array.IndexOf(names, "PersistentLevelName");
+                int listName = Array.IndexOf(names, "CheckpointList");
+                int nameProp = Array.IndexOf(names, "NameProperty");
+                int arrayProp = Array.IndexOf(names, "ArrayProperty");
+                List<CheckpointEntry> found = new List<CheckpointEntry>();
+
+                int p = h.ExportOffset;
+                for (int i = 0; i < h.ExportCount && p + 48 <= buffer.Length; i++)
+                {
+                    int classIndex = BitConverter.ToInt32(buffer, p);
+                    int size = BitConverter.ToInt32(buffer, p + 32);
+                    int offset = BitConverter.ToInt32(buffer, p + 36);
+                    int netCount = BitConverter.ToInt32(buffer, p + 44);
+                    string cls = (classIndex < 0 && -classIndex - 1 < imports.ObjectName.Length) ? imports.ObjectName[-classIndex - 1] : "";
+                    bool inside = size > 0 && offset >= 0 && (long)offset + size <= buffer.Length;
+
+                    if (inside && cls == "OLCheckpoint")
+                    {
+                        CheckpointEntry e = new CheckpointEntry();
+                        e.Name = FindNameProperty(buffer, offset, offset + size, cpName, nameProp, names);
+                        e.PersistentLevel = FindNameProperty(buffer, offset, offset + size, levelName, nameProp, names);
+                        if (e.Name != "")
+                        {
+                            found.Add(e);
+                        }
+                    }
+                    else if (inside && cls == "OLCheckpointList" && result.ListOrder.Length == 0)
+                    {
+                        result.ListOrder = FindNameArrayProperty(buffer, offset, offset + size, listName, arrayProp, names);
+                    }
+
+                    p += 48 + 4 * Math.Max(netCount, 0) + 20;
+                }
+                result.Checkpoints = found.ToArray();
+            }
+            return result;
+        }
+
+        // A name property's value: its tag is (name, NameProperty, size 8, index 0), the value follows. "" when
+        // the object does not set it, or sets it to None.
+        static string FindNameProperty(byte[] b, int start, int end, int prop, int nameProp, string[] names)
+        {
+            string value = "";
+            if (prop >= 0 && nameProp >= 0)
+            {
+                for (int p = start; p + 32 <= end && value == ""; p++)
+                {
+                    if (BitConverter.ToInt32(b, p) == prop && BitConverter.ToInt32(b, p + 4) == 0 &&
+                        BitConverter.ToInt32(b, p + 8) == nameProp && BitConverter.ToInt32(b, p + 12) == 0 &&
+                        BitConverter.ToInt32(b, p + 16) == 8 && BitConverter.ToInt32(b, p + 20) == 0)
+                    {
+                        value = FormatName(names, BitConverter.ToInt32(b, p + 24), BitConverter.ToInt32(b, p + 28));
+                        if (value == "None")
+                        {
+                            value = "";
+                        }
+                        break;
+                    }
+                }
+            }
+            return value;
+        }
+
+        // An array<name> property: its tag, then a count and that many names.
+        static string[] FindNameArrayProperty(byte[] b, int start, int end, int prop, int arrayProp, string[] names)
+        {
+            string[] value = new string[0];
+            if (prop >= 0 && arrayProp >= 0)
+            {
+                for (int p = start; p + 28 <= end; p++)
+                {
+                    if (BitConverter.ToInt32(b, p) == prop && BitConverter.ToInt32(b, p + 4) == 0 &&
+                        BitConverter.ToInt32(b, p + 8) == arrayProp && BitConverter.ToInt32(b, p + 12) == 0 &&
+                        BitConverter.ToInt32(b, p + 20) == 0)
+                    {
+                        int size = BitConverter.ToInt32(b, p + 16);
+                        int count = BitConverter.ToInt32(b, p + 24);
+                        if (count >= 0 && size == 4 + 8 * count && p + 28 + 8 * count <= end)
+                        {
+                            value = new string[count];
+                            for (int i = 0; i < count; i++)
+                            {
+                                value[i] = FormatName(names, BitConverter.ToInt32(b, p + 28 + 8 * i), BitConverter.ToInt32(b, p + 32 + 8 * i));
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            return value;
         }
 
         // Decompresses only as far as the wanted tables reach, then parses them into info.
@@ -595,6 +768,13 @@ function Read-UPackage
     )
 
     return [OutlastToolkit.UPackageReader]::Read($Path, $Names.IsPresent, $Imports.IsPresent)
+}
+
+# The checkpoints a cooked map holds, each with the persistent map it names, and the order its checkpoint
+# list gives them.
+function Read-Checkpoints([string] $Path)
+{
+    return [OutlastToolkit.UPackageReader]::ReadCheckpoints($Path)
 }
 
 # The script packages retail lacks that a set of imports needs. Kind is Mod for a package registered with

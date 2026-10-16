@@ -42,7 +42,7 @@ echo Mod:    %ModName%
 echo Engine: %EngineRoot%
 echo.
 
-echo [1/2] Checking the manifest
+echo [1/3] Checking the manifest
 rem A mod with a manifest needs an Id, Name, Version and Author, and the Id must be
 rem namespaced by the Author. Check before cooking, so that costs a second here rather
 rem than a .u that compiles fine and then does not appear in the launcher.
@@ -56,7 +56,16 @@ if ERRORLEVEL 2 (
 )
 echo.
 
-echo [2/2] Compiling scripts
+echo [2/3] Checking config
+rem A class declared config(X) reads Config\DefaultX.ini. Write a starter for any the mod
+rem is missing, and flag settings left empty, which otherwise just read as nothing in game.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%EngineRoot%\MakeModSrcFiles\Check-ModConfig.ps1" -Classes "%~dp0Classes" -Package %ModName% -EngineRoot "%EngineRoot%"
+if ERRORLEVEL 1 (
+    exit /b 1
+)
+echo.
+
+echo [3/3] Compiling scripts
 rem Delete our own .u so this package is always rebuilt from source. make would
 rem otherwise skip it whenever it judged it up to date, which is the usual reason a
 rem change appears to have no effect. It costs a couple of seconds for one package,

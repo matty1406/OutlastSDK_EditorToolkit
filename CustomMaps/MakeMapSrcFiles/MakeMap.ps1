@@ -5,12 +5,17 @@
 .PARAMETER MapName
   The project name. It names both folders and the texture caches the cook writes, such as Textures_<MapName>.tfc. Letters, digits and underscores; anything else is turned into PascalCase. Defaults to $env:MapName, which is how MakeMap.bat passes it.
 
+.PARAMETER Author
+  Your author name, as the SDK's Mods menu shows it. Defaults to $env:MapAuthor, which is how MakeMap.bat passes it.
+
 .PARAMETER EngineRoot
   Root of the UnrealEngine3 tree. Defaults to the parent of MakeMapSrcFiles.
 #>
 [CmdletBinding()]
 param(
     [string] $MapName = $env:MapName,
+
+    [string] $Author = $env:MapAuthor,
 
     [string] $EngineRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 )
@@ -35,6 +40,19 @@ if (-not $name)
 if ($name -cne $typed)
 {
     Write-Host "  '$typed' is not a valid name, using '$name'"
+}
+
+# The cook saves a package called GuidCache_<name>, and the engine refuses package names over 30 characters.
+if ($name.Length -gt 20)
+{
+    throw "'$name' is $($name.Length) characters long; a map project name can be at most 20, since the cook saves a file called GuidCache_$name and the engine refuses names over 30."
+}
+
+# The author is one line of Map.ini, so a line break would end it early.
+$Author = ("$Author" -replace '[\r\n]', '').Trim()
+if (-not $Author)
+{
+    throw "No author name given."
 }
 
 if (-not (Test-Path (Join-Path $EngineRoot "Binaries\Win64\OLGame.com")))
@@ -66,13 +84,11 @@ $templates = @(
 
 foreach ($template in $templates)
 {
-    $body = (Get-Content (Join-Path $PSScriptRoot $template.From) -Raw) -replace '__MAPNAME__', $name
+    $body = (Get-Content (Join-Path $PSScriptRoot $template.From) -Raw).Replace('__MAPNAME__', $name).Replace('__AUTHOR__', $Author)
 
-    # cmd misreads goto and call targets in LF-only batch files, so the .bat always gets CRLF.
-    if ($template.To -like '*.bat')
-    {
-        $body = $body -replace '\r?\n', "`r`n"
-    }
+    # cmd misreads goto and call targets in LF-only batch files, so the .bat always gets CRLF,
+    # and the .ini too, as Windows files.
+    $body = $body -replace '\r?\n', "`r`n"
 
     Set-Content -Path (Join-Path $projectDir $template.To) -Value $body -Encoding ASCII -NoNewline
     Write-Host "  created  CustomMaps\$name\$($template.To)"

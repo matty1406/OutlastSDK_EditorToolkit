@@ -82,6 +82,14 @@ if exist "%~dp0Config" (
     echo   Config\
 )
 
+rem The OutlastSDK reads a mod's config from mod.ini in its own folder, so a mod with a
+rem manifest also gets one, merged from Config\. A mod without one is left as it is.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%EngineRoot%\MakeModSrcFiles\Check-ModConfig.ps1" -Classes "%~dp0Classes" -Package %ModName% -ModIniOut "%OutDir%"
+if ERRORLEVEL 1 (
+    echo   Failed to write mod.ini
+    exit /b 1
+)
+
 if exist "%~dp0Localization" (
     robocopy "%~dp0Localization" "%OutDir%\Localization" /E > nul
     if ERRORLEVEL 8 (

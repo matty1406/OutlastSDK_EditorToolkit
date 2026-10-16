@@ -44,18 +44,145 @@ function Format-Size([long] $Bytes)
 # Reads the settings from Map.ini; anything else in the file is ignored.
 function Read-MapSettings([string] $Path)
 {
-    $settings = @{ Output = ''; Maps = ''; AllowRetailNames = '' }
+    $settings = @{ Name = ''; Author = ''; Version = ''; Menu = ''; Start = ''; Checkpoints = ''; Output = ''; Maps = ''; AllowRetailNames = '' }
     if (Test-Path -LiteralPath $Path)
     {
         foreach ($line in Get-Content -LiteralPath $Path)
         {
-            if ($line -match '^\s*(Output|Maps|AllowRetailNames)\s*=\s*(.*?)\s*$')
+            if ($line -match '^\s*(Name|Author|Version|Menu|Start|Checkpoints|Output|Maps|AllowRetailNames)\s*=\s*(.*?)\s*$')
             {
                 $settings[$Matches[1]] = $Matches[2]
             }
         }
     }
     return $settings
+}
+
+
+# The keys in a language file, each with its section and the line as written, so quoting survives the copy.
+function Read-LocFile([string] $Path)
+{
+    $section = ''
+    foreach ($line in [IO.File]::ReadAllLines($Path))
+    {
+        if ($line -match '^\s*\[(.+)\]\s*$')
+        {
+            $section = $Matches[1]
+        }
+        elseif ($section -and $line -match '^\s*([^;\s][^=]*?)\s*=')
+        {
+            [pscustomobject] @{ Section = $section; Key = $Matches[1]; Line = $line }
+        }
+    }
+}
+
+# Whether a map names this key: a tutorial, objective, prompt, item or checkpoint location, or a document as
+# <Name> and <Name>_Title. The engine stores a trailing _<number> apart from the name, so Note_2 is listed as Note.
+function Test-KeyUsed([string] $Key, $Names)
+{
+    $base = $Key -replace '_Title$', ''
+    $used = $Names.Contains($Key) -or $Names.Contains($base)
+    if (-not $used -and $base -match '^(.+)_(0|[1-9]\d*)$')
+    {
+        $used = $Names.Contains($Matches[1])
+    }
+    return $used
+}
+
+# The text the maps need that retail lacks, one entry per language file. A file named like one of retail's (OLGame.int
+# and so on) gives only the keys retail does not have, so the game's own text is never replaced. A shared folder gives
+# only keys the maps name, and its other files only when named after a shipped package.
+function Find-MapText($Sources, [string] $RetailDir, $Names, $Packages)
+{
+    $found = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::OrdinalIgnoreCase)
+    $retailKeys = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::OrdinalIgnoreCase)
+    $taken = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($source in $Sources)
+    {
+        $langDirs = @()
+        if (Test-Path -LiteralPath $source.Dir)
+        {
+            $langDirs = @(Get-ChildItem -LiteralPath $source.Dir -Directory)
+        }
+
+        foreach ($langDir in $langDirs)
+        {
+            foreach ($file in Get-ChildItem -LiteralPath $langDir.FullName -File | Where-Object { $_.Extension -eq ".$($langDir.Name)" })
+            {
+                $relative = "$($langDir.Name)\$($file.Name)"
+                $retailFile = Join-Path $RetailDir $relative
+                if (Test-Path -LiteralPath $retailFile)
+                {
+                    if (-not $retailKeys.ContainsKey($relative))
+                    {
+                        $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+                        foreach ($entry in @(Read-LocFile $retailFile))
+                        {
+                            [void] $set.Add("$($entry.Section)`n$($entry.Key)")
+                        }
+                        $retailKeys[$relative] = $set
+                    }
+
+                    foreach ($entry in @(Read-LocFile $file.FullName))
+                    {
+                        $id = "$relative`n$($entry.Section)`n$($entry.Key)"
+                        $wanted = -not $retailKeys[$relative].Contains("$($entry.Section)`n$($entry.Key)") -and -not $taken.Contains($id)
+                        if ($wanted -and $source.Shared)
+                        {
+                            $wanted = Test-KeyUsed $entry.Key $Names
+                        }
+
+                        if ($wanted)
+                        {
+                            [void] $taken.Add($id)
+                            if (-not $found.ContainsKey($relative))
+                            {
+                                $found[$relative] = [pscustomobject] @{ Relative = $relative; Whole = $null; Entries = (New-Object 'System.Collections.Generic.List[object]') }
+                            }
+                            $found[$relative].Entries.Add($entry)
+                        }
+                    }
+                }
+                elseif (-not $found.ContainsKey($relative) -and (-not $source.Shared -or $Packages -contains $file.BaseName))
+                {
+                    $found[$relative] = [pscustomobject] @{ Relative = $relative; Whole = $file; Entries = $null }
+                }
+            }
+        }
+    }
+
+    return @($found.Values)
+}
+
+# Writes keys grouped under their sections, in UTF-16 like retail's own language files.
+function Write-LocFile([string] $Path, $Entries)
+{
+    $sections = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($entry in $Entries)
+    {
+        if (-not ($sections -contains $entry.Section))
+        {
+            $sections.Add($entry.Section)
+        }
+    }
+
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($section in $sections)
+    {
+        if ($lines.Count -gt 0)
+        {
+            $lines.Add('')
+        }
+        $lines.Add("[$section]")
+        foreach ($entry in $Entries | Where-Object { $_.Section -eq $section })
+        {
+            $lines.Add($entry.Line)
+        }
+    }
+
+    New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
+    [IO.File]::WriteAllText($Path, ($lines -join "`r`n"), [Text.Encoding]::Unicode)
 }
 
 $EngineRoot = (Resolve-Path -LiteralPath $EngineRoot).Path
@@ -68,7 +195,7 @@ $settings = Read-MapSettings (Join-Path $ProjectDir 'Map.ini')
 # A total conversion can mean to replace retail's own files, such as its menu or checkpoint level.
 $allowRetailNames = $settings.AllowRetailNames -match '^(true|yes|1)$'
 
-# The game is needed for retail's cooker data and for Output=Game. Find-Outlast throws when it finds nothing.
+# The game is needed for retail's cooker data and text. Find-Outlast throws when it finds nothing.
 $game = $null
 try
 {
@@ -84,20 +211,24 @@ if (-not (Test-Path -LiteralPath $com))
     Fail "The engine was not found at $EngineRoot. This project has to stay in CustomMaps\$Name inside the engine tree."
 }
 
+# The cook saves a package called GuidCache_<Name>, and the engine refuses package names over 30 characters.
+if ($Name.Length -gt 20)
+{
+    Fail "The project name $Name is $($Name.Length) characters long and can be at most 20, since the cook saves a file called GuidCache_$Name and the engine refuses names over 30. Make a project with a shorter name using MakeMap.bat, then move your maps and Map.ini settings into it."
+}
+
 # The output folder is settled before cooking, so a bad setting fails in seconds rather than after a cook.
 $cleanFirst = $false
-if (-not $settings.Output)
+$outputNote = ''
+if (-not $settings.Output -or $settings.Output -eq 'Game')
 {
+    # Cooking never installs into the game, the same as building a mod; copying the folder over is yours.
+    if ($settings.Output -eq 'Game')
+    {
+        $outputNote = "Output=Game no longer installs into the game, so this cooks into Output\$Name. Copy that into Outlast\OLGame\Mods\Maps to play it."
+    }
     $outDir = Join-Path $ProjectDir "Output\$Name"
     $cleanFirst = $true
-}
-elseif ($settings.Output -eq 'Game')
-{
-    if (-not $game)
-    {
-        Fail "Output=Game needs your Outlast install, which was not found. Set OUTLAST_DIR, or pick another folder in Map.ini."
-    }
-    $outDir = Join-Path $game 'OLGame\CookedPCConsole'
 }
 elseif ([IO.Path]::IsPathRooted($settings.Output))
 {
@@ -108,6 +239,9 @@ else
     $outDir = Join-Path $ProjectDir $settings.Output
 }
 $outDir = [IO.Path]::GetFullPath($outDir)
+
+# The SDK reads the map's own Localization folder after the game's, key by key, so its text adds to the game's.
+$locRoot = Join-Path $outDir 'Localization'
 
 # Cooked copies under Content would clash with the source maps every time the editor starts.
 if ($outDir.StartsWith((Join-Path $EngineRoot 'OLGame\Content'), [StringComparison]::OrdinalIgnoreCase))
@@ -122,6 +256,10 @@ if ($game)
 {
     Write-Host "Outlast: $game"
 }
+if ($outputNote)
+{
+    Write-Host $outputNote -ForegroundColor Yellow
+}
 Write-Host ""
 
 # --- 1. Maps ---------------------------------------------------------------------------------------
@@ -132,7 +270,8 @@ $maps = @()
 $udks = @()
 if ($settings.Maps)
 {
-    $maps = @($settings.Maps -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    # Names may be typed as MyMap.udk or with a folder; the cooked file is just MyMap.upk, so keep the bare name.
+    $maps = @($settings.Maps -split ',' | ForEach-Object { [IO.Path]::GetFileName($_.Trim()) -replace '\.(udk|upk)$', '' } | Where-Object { $_ })
     Write-Host "  From Map.ini: $($maps -join ', ')"
 }
 else
@@ -171,6 +310,13 @@ if ($udks)
 {
     $known += @($udks | ForEach-Object { $_.BaseName })
 }
+# The same limit holds for every map. The editor will not save a longer name, but a file can be renamed by hand.
+$long = @($known | Where-Object { $_.Length -gt 30 } | Sort-Object -Unique)
+if ($long.Count -gt 0)
+{
+    Fail ("These map names are over 30 characters, which the engine refuses to cook: " + ($long -join ', ') + ". Rename them in the editor (File, Save As), then cook again.")
+}
+
 $early = @($known | Where-Object { $retailNames.Contains($_) } | Sort-Object -Unique)
 if ($early.Count -gt 0)
 {
@@ -277,8 +423,9 @@ $classPackages = New-Object 'System.Collections.Generic.HashSet[string]' ([Strin
 $ship = New-Object 'System.Collections.Generic.List[System.IO.FileInfo]'
 $queued = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 
-# Each map, then the sublevels its own header says it pulls in.
+# Each map, then the sublevels its own header says it pulls in, remembering which map pulls in each.
 $packages = New-Object 'System.Collections.Generic.List[string]'
+$ownerMap = @{}
 foreach ($map in $maps)
 {
     $file = Get-ChildItem -LiteralPath $cookedDir -Filter "$map.upk" | Select-Object -First 1
@@ -292,6 +439,7 @@ foreach ($map in $maps)
         if ($queued.Add($package))
         {
             $packages.Add($package)
+            $ownerMap[$package] = $map
         }
     }
 }
@@ -385,9 +533,9 @@ foreach ($script in $scripts)
         {
             $scriptNotes += "Warning: $($script.Stale) changed after $($script.Name).u was built, so the copy shipped may be out of date. Run CompileRetail.bat in Development\Src\$($script.Name) to include it."
         }
-        if ($script.Sources -and ((Test-Path -LiteralPath (Join-Path $script.Sources 'Config')) -or (Test-Path -LiteralPath (Join-Path $script.Sources 'Localization'))))
+        if ($script.Sources -and (Test-Path -LiteralPath (Join-Path $script.Sources 'Config')))
         {
-            $scriptNotes += "$($script.Name) also has Config or Localization files. Deploy.bat in Development\Src\$($script.Name) packages those; ship them with your maps."
+            $scriptNotes += "$($script.Name) also has Config files. Deploy.bat in Development\Src\$($script.Name) packages those; ship them with your maps."
         }
     }
 }
@@ -395,6 +543,28 @@ foreach ($script in $scripts)
 if ($scriptProblems.Count -gt 0)
 {
     Fail ("Your maps use classes from script packages that cannot ship yet:`n  " + ($scriptProblems -join "`n  "))
+}
+
+# Text comes from this project's Localization folder, then the script packages that ship, then the engine's own
+# folder, which every project shares and the editor shows.
+$mapText = @()
+if ($game)
+{
+    $textSources = @([pscustomobject] @{ Dir = (Join-Path $ProjectDir 'Localization'); Shared = $false })
+    foreach ($script in $scripts)
+    {
+        if ($script.Kind -eq 'Mod' -and $script.Name -ne 'OutlastSDK' -and $script.Sources)
+        {
+            $textSources += [pscustomobject] @{ Dir = (Join-Path $script.Sources 'Localization'); Shared = $false }
+        }
+    }
+    $textSources += [pscustomobject] @{ Dir = (Join-Path $EngineRoot 'OLGame\Localization'); Shared = $true }
+
+    $mapText = @(Find-MapText $textSources (Join-Path $game 'OLGame\Localization') $usedNames @($ship | ForEach-Object { $_.BaseName }))
+}
+else
+{
+    $scriptNotes += "Warning: Outlast was not found, so your maps' text was not checked against retail's. Set OUTLAST_DIR to include it."
 }
 
 # A shipped file named like a retail one would replace the game's own copy.
@@ -411,6 +581,115 @@ if ($clashes.Count -gt 0)
     }
 }
 
+# Map.ini's levels and start checkpoint have to be among what was cooked, or the SDK would look for
+# things that are not there and the game would stall on the menu.
+$cookedLevels = @($ship | Where-Object { $_.Extension -eq '.upk' } | ForEach-Object { $_.BaseName })
+$settingProblems = @()
+foreach ($key in 'Menu', 'Checkpoints')
+{
+    $level = $settings[$key]
+    if ($level -and $cookedLevels -notcontains $level)
+    {
+        $settingProblems += "$key=$level is not one of the cooked maps ($($cookedLevels -join ', ')). Check the name, or add the map to Maps=."
+    }
+}
+
+# Every checkpoint the cooked maps hold, with the level it is in and the persistent map it names,
+# and what each level's checkpoint list names.
+$checkpoints = @()
+$listOrder = @()
+$lists = @{}
+foreach ($level in @($ship | Where-Object { $_.Extension -eq '.upk' }))
+{
+    $found = Read-Checkpoints $level.FullName
+    foreach ($cp in $found.Checkpoints)
+    {
+        $checkpoints += [pscustomobject] @{ Name = $cp.Name; PersistentLevel = $cp.PersistentLevel; Level = $level.BaseName }
+    }
+    if ($found.ListOrder.Count -gt 0)
+    {
+        $lists[$level.BaseName] = @($found.ListOrder)
+    }
+    if ($listOrder.Count -eq 0)
+    {
+        $listOrder = @($found.ListOrder)
+    }
+}
+
+# New Game starts at Start, or when Map.ini leaves it empty, at the first checkpoint: the first one a
+# checkpoint list names, else the first one in the maps.
+$start = $settings.Start
+$startHow = 'set in Map.ini'
+if (-not $start -and $listOrder.Count -gt 0)
+{
+    $start = $listOrder[0]
+    $startHow = 'the first in your checkpoint list'
+}
+elseif (-not $start -and $checkpoints.Count -gt 0)
+{
+    $start = $checkpoints[0].Name
+    $startHow = 'the first checkpoint in your maps'
+}
+$startCp = $checkpoints | Where-Object { $_.Name -eq $start } | Select-Object -First 1
+
+# A start that names a persistent map is in a checkpoint level, which the SDK streams into the game's menu.
+# One that names none is inside the map it starts, which the SDK opens at that checkpoint instead.
+$checkpointLevel = $settings.Checkpoints
+$startMap = ''
+if ($startCp -and $startCp.PersistentLevel -and -not $checkpointLevel)
+{
+    $checkpointLevel = $startCp.Level
+}
+elseif ($startCp -and -not $startCp.PersistentLevel -and -not $checkpointLevel)
+{
+    $startMap = $ownerMap[$startCp.Level]
+}
+
+if ($start -and -not $startCp)
+{
+    $settingProblems += "Start=$start is not a checkpoint in the cooked maps. Their checkpoints: $(($checkpoints | ForEach-Object { $_.Name }) -join ', ')."
+}
+if ($startCp -and $settings.Checkpoints -and $startCp.Level -ne $settings.Checkpoints)
+{
+    $settingProblems += "Start=$start is in $($startCp.Level), not in Checkpoints=$($settings.Checkpoints), so the menu could not find it."
+}
+if ($startCp -and $settings.Checkpoints -and -not $startCp.PersistentLevel)
+{
+    $settingProblems += "Start=$start names no persistent map, so New Game from Checkpoints=$($settings.Checkpoints) would have nowhere to go. Set PersistentLevelName on that checkpoint."
+}
+if ($settingProblems.Count -gt 0)
+{
+    Fail ("Map.ini names things this cook did not make:`n  " + ($settingProblems -join "`n  "))
+}
+
+if ($startMap)
+{
+    $scriptNotes += "New Game streams $startMap in and starts at $start ($startHow)."
+}
+elseif (-not $start -and -not $settings.Menu)
+{
+    $scriptNotes += "Warning: your maps hold no OLCheckpoint, so New Game still starts the base game while this map is active."
+}
+
+# The game lists a save in Continue and Load only when a checkpoint list on the menu names its checkpoint.
+# Without a checkpoint level, nothing names them, so a map without one cannot be continued.
+if ($start -and -not $checkpointLevel -and -not $settings.Menu)
+{
+    $scriptNotes += "Warning: no checkpoint level, so Continue and Load will not list this map's saves. Put your checkpoints and an OLCheckpointList in a level of their own, like the game's X_Checkpoints, with PersistentLevelName set on each."
+}
+elseif ($checkpointLevel -and -not $lists.ContainsKey($checkpointLevel))
+{
+    $scriptNotes += "Warning: $checkpointLevel holds no OLCheckpointList, so Continue and Load will not list this map's saves."
+}
+elseif ($checkpointLevel)
+{
+    $unlisted = @($checkpoints | Where-Object { $_.Level -eq $checkpointLevel -and $lists[$checkpointLevel] -notcontains $_.Name } | ForEach-Object { $_.Name })
+    if ($unlisted.Count -gt 0)
+    {
+        $scriptNotes += "Saves at $($unlisted -join ', ') are not listed in Continue or Load, since $checkpointLevel's checkpoint list leaves them out."
+    }
+}
+
 foreach ($file in $ship)
 {
     $label = ""
@@ -424,6 +703,22 @@ foreach ($file in $ship)
         }
     }
     Write-Host ("  {0,-40} {1,10}{2}" -f $file.Name, (Format-Size $file.Length), $label)
+}
+foreach ($text in $mapText)
+{
+    if ($text.Whole)
+    {
+        Write-Host ("  {0,-40} {1,10}  text" -f "Localization\$($text.Relative)", (Format-Size $text.Whole.Length))
+    }
+    else
+    {
+        $keyWord = 'keys'
+        if ($text.Entries.Count -eq 1)
+        {
+            $keyWord = 'key'
+        }
+        Write-Host ("  {0,-40} {1,10}  text retail lacks" -f "Localization\$($text.Relative)", "$($text.Entries.Count) $keyWord")
+    }
 }
 foreach ($note in $scriptNotes)
 {
@@ -453,15 +748,38 @@ if ($cleanFirst -and (Test-Path -LiteralPath $outDir))
 }
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-# Files this project copied last time that this cook no longer makes, so a renamed map does not linger.
+# What this project wrote last time, so its leftovers can be removed and another project's text left alone.
 $record = Join-Path $ProjectDir 'LastOutput.txt'
-if (-not $cleanFirst -and (Test-Path -LiteralPath $record))
+$previous = @()
+if (Test-Path -LiteralPath $record)
 {
-    $removed = 0
-    foreach ($old in Get-Content -LiteralPath $record)
+    $previous = @(Get-Content -LiteralPath $record | Where-Object { $_ })
+}
+
+# A text file already there that this project did not write belongs to another project, so it is not replaced.
+$texts = @()
+foreach ($text in $mapText)
+{
+    $dest = Join-Path $locRoot $text.Relative
+    if ((Test-Path -LiteralPath $dest) -and $previous -notcontains $dest)
     {
-        $stillShipped = $ship | Where-Object { (Join-Path $outDir $_.Name) -eq $old }
-        if ($old -and -not $stillShipped -and (Split-Path $old) -eq $outDir -and (Test-Path -LiteralPath $old))
+        Write-Host "  Left $dest as it is: another project's text is already there. Merge yours into it by hand, or delete it and cook again." -ForegroundColor Yellow
+    }
+    else
+    {
+        $texts += [pscustomobject] @{ Text = $text; Dest = $dest }
+    }
+}
+
+# Files this project copied last time that this cook no longer makes, so a renamed map does not linger.
+if (-not $cleanFirst)
+{
+    $keep = @($ship | ForEach-Object { Join-Path $outDir $_.Name }) + @($texts | ForEach-Object { $_.Dest })
+    $removed = 0
+    foreach ($old in $previous)
+    {
+        $ours = ((Split-Path $old) -eq $outDir) -or $old.StartsWith("$locRoot\", [StringComparison]::OrdinalIgnoreCase)
+        if ($ours -and $keep -notcontains $old -and (Test-Path -LiteralPath $old))
         {
             Remove-Item -LiteralPath $old -Force
             $removed++
@@ -485,6 +803,32 @@ foreach ($file in $ship)
     Copy-Item -LiteralPath $file.FullName -Destination $dest -Force
     $written += $dest
 }
+foreach ($text in $texts)
+{
+    if ($text.Text.Whole)
+    {
+        New-Item -ItemType Directory -Force -Path (Split-Path $text.Dest) | Out-Null
+        Copy-Item -LiteralPath $text.Text.Whole.FullName -Destination $text.Dest -Force
+    }
+    else
+    {
+        Write-LocFile $text.Dest $text.Text.Entries
+    }
+    $written += $text.Dest
+}
+
+# What the SDK reads to know this map. UTF-16, so a name or author outside plain English survives.
+$shownName = $settings.Name
+if (-not $shownName)
+{
+    $shownName = $Name
+}
+$info = @('[Map]', "Name=$shownName", "Author=$($settings.Author)", "Version=$($settings.Version)",
+          "Menu=$($settings.Menu)", "Start=$start", "Checkpoints=$checkpointLevel", "StartMap=$startMap")
+$infoPath = Join-Path $outDir 'map.ini'
+[IO.File]::WriteAllText($infoPath, ($info -join "`r`n"), [Text.Encoding]::Unicode)
+$written += $infoPath
+
 [IO.File]::WriteAllText($record, ($written -join "`r`n"))
 
 $total = ($ship | Measure-Object -Property Length -Sum).Sum
@@ -494,4 +838,10 @@ if ($ship.Count -eq 1)
     $fileWord = 'file'
 }
 Write-Host ("  {0} {1}, {2}, in {3}" -f $ship.Count, $fileWord, (Format-Size $total), $outDir)
+if ($texts.Count -gt 0)
+{
+    Write-Host "  Text in $locRoot"
+}
+Write-Host "  map.ini: $shownName, $(if ($settings.Menu) { "its own menu ($($settings.Menu))" } else { "the game's menu" })$(if ($start) { ", New Game at $start" })"
+Write-Host "  To play it, copy this folder into Outlast\OLGame\Mods\Maps, then switch the map on in the Mods menu." -ForegroundColor DarkGray
 exit 0

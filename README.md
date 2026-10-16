@@ -43,6 +43,8 @@ A name that is not a valid package name is turned into one for you, so `my cool 
 
 Fill in the manifest and run `Compile.bat` while you work on it. To ship it, run `CompileRetail.bat`, then `Deploy.bat`. That is a mod. Deploy refuses a build that is not in retail format, since retail Outlast could not load it.
 
+A class declared `config(X)` keeps its settings in `Config\DefaultX.ini`. Compile writes a starter with every setting if the file is missing, and warns about any left empty. Deploy ships it, and for an SDK mod also merges it into the `mod.ini` the SDK reads.
+
 ### The manifest
 
 Every SDK script mod needs one, and `MakeMod.bat` writes it for you. It extends `SDKModManifest`, which is how the SDK recognises your mod: it reads the parent class straight out of the compiled `.u` without loading it, so your mod can be listed while still disabled.
@@ -65,17 +67,23 @@ Both the sources and a prebuilt `OutlastSDK.u` ship here. `Install.bat` puts the
 
 ## Quick start: map
 
-Run `MakeMap.bat` at the engine root and type a project name. You get:
+Run `MakeMap.bat` at the engine root and type a project name of up to 20 characters, then your author name. You get:
 
 ```
 OLGame\Content\CustomMaps\<Name>\    save your maps here
 CustomMaps\<Name>\
     Cook.bat                         cook for retail Outlast
-    Map.ini                          where the output goes, and which maps to cook
-    Output\<Name>\                   the files to ship
+    Map.ini                          your map's settings, where the output goes, and which maps to cook
+    Output\<Name>\                   the folder to ship
 ```
 
 Save your maps into the content folder and run `Cook.bat`. It finds your maps and cooks their sublevels with them, then copies out only what your maps use: the cooked maps, the texture caches they reference, and any of your own script packages (`.u`) they use, as long as those were built with `CompileRetail.bat`. Everything else the cooker writes is left out, and it refuses any map name retail Outlast already uses, since that would replace the game's own file.
+
+A map is usually a campaign, and `Map.ini` says how it starts. `Menu` is the level your own main menu is in; leave it empty to use the game's menu, whose New Game and Load then belong to your map. `Start` is the checkpoint New Game begins at; left empty, the cook picks the first one in your maps. Put your checkpoints and an `OLCheckpointList` in a level of their own (`Checkpoints`), the way the game keeps them in `X_Checkpoints`. Without one, New Game can still start at a checkpoint inside your map, but Continue and Load will not list its saves. The cook checks each setting against what it cooked and writes them into the `map.ini` the SDK reads.
+
+New text for your maps (tutorials, objectives, prompts, items, checkpoint names, documents) goes in `OLGame\Localization` as usual, where the editor shows it, or in `CustomMaps\<Name>\Localization`. The cook ships the text retail lacks, in `Localization\` inside the output: all of your project's own, and from `OLGame\Localization` only the keys your maps use.
+
+To play it, copy the output folder into `Outlast\OLGame\Mods\Maps\` and switch the map on in the Mods menu. Cook.bat never installs into the game itself, the same as the mod tools.
 
 ## Quick start: C++ mod
 

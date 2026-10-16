@@ -1,7 +1,26 @@
 [Map]
-; Where Cook.bat puts the finished files. Leave it empty for Output\__MAPNAME__ next to Cook.bat.
-; Set it to Game to copy them straight into your Outlast's CookedPCConsole folder for testing,
-; or to any other folder. A folder inside OLGame\Content is refused, since the editor would find the copies.
+; What the SDK's Mods menu shows for this map.
+Name=__MAPNAME__
+Author=__AUTHOR__
+Version=1.0
+
+; The level your map's main menu is in. Leave it empty to use the game's own menu,
+; whose New Game and Load then belong to your map while it is active.
+Menu=
+
+; The checkpoint New Game starts at. Leave it empty for the first one: the first your
+; checkpoint list names, else the first in your maps.
+Start=
+
+; A level holding your checkpoints and an OLCheckpointList, like the game's X_Checkpoints,
+; streamed into the game's menu. Leave it empty to find it from the start checkpoint. Without
+; one, New Game still starts at a checkpoint inside your maps, but Continue and Load cannot
+; list your saves, just as the game lists none whose checkpoint its list does not name.
+Checkpoints=
+
+; Where Cook.bat puts the finished files. Leave it empty for Output\__MAPNAME__ next to Cook.bat,
+; or name any other folder. A folder inside OLGame\Content is refused, since the editor would
+; find the copies. To play the map, copy the output folder into Outlast\OLGame\Mods\Maps.
 Output=
 
 ; The maps to cook, separated by commas. Leave it empty to cook every map in
