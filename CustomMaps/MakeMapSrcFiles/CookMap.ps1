@@ -155,7 +155,7 @@ function Find-MapText($Sources, [string] $RetailDir, $Names, $Packages)
     return @($found.Values)
 }
 
-# Writes keys grouped under their sections, in UTF-16 like retail's own language files.
+# Writes keys grouped under their sections, in UTF-16 like retail's own language files, with a blank line after each section as the engine lays out its files.
 function Write-LocFile([string] $Path, $Entries)
 {
     $sections = New-Object 'System.Collections.Generic.List[string]'
@@ -167,22 +167,19 @@ function Write-LocFile([string] $Path, $Entries)
         }
     }
 
-    $lines = New-Object 'System.Collections.Generic.List[string]'
+    $text = ''
     foreach ($section in $sections)
     {
-        if ($lines.Count -gt 0)
-        {
-            $lines.Add('')
-        }
-        $lines.Add("[$section]")
+        $text += "[$section]`r`n"
         foreach ($entry in $Entries | Where-Object { $_.Section -eq $section })
         {
-            $lines.Add($entry.Line)
+            $text += "$($entry.Line)`r`n"
         }
+        $text += "`r`n"
     }
 
     New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
-    [IO.File]::WriteAllText($Path, ($lines -join "`r`n"), [Text.Encoding]::Unicode)
+    [IO.File]::WriteAllText($Path, $text, [Text.Encoding]::Unicode)
 }
 
 $EngineRoot = (Resolve-Path -LiteralPath $EngineRoot).Path
@@ -225,7 +222,7 @@ if (-not $settings.Output -or $settings.Output -eq 'Game')
     # Cooking never installs into the game, the same as building a mod; copying the folder over is yours.
     if ($settings.Output -eq 'Game')
     {
-        $outputNote = "Output=Game no longer installs into the game, so this cooks into Output\$Name. Copy that into Outlast\OLGame\Mods\Maps to play it."
+        $outputNote = "Output=Game no longer installs into the game, so this cooks into Output\$Name. Copy that into Outlast\OLGame\Mods\_Maps to play it."
     }
     $outDir = Join-Path $ProjectDir "Output\$Name"
     $cleanFirst = $true
@@ -817,7 +814,7 @@ foreach ($text in $texts)
     $written += $text.Dest
 }
 
-# What the SDK reads to know this map. UTF-16, so a name or author outside plain English survives.
+# What the SDK reads to know this map. UTF-16, so a name or author outside plain English survives, ending in a blank line as the engine writes its inis.
 $shownName = $settings.Name
 if (-not $shownName)
 {
@@ -826,8 +823,19 @@ if (-not $shownName)
 $info = @('[Map]', "Name=$shownName", "Author=$($settings.Author)", "Version=$($settings.Version)",
           "Menu=$($settings.Menu)", "Start=$start", "Checkpoints=$checkpointLevel", "StartMap=$startMap")
 $infoPath = Join-Path $outDir 'map.ini'
-[IO.File]::WriteAllText($infoPath, ($info -join "`r`n"), [Text.Encoding]::Unicode)
+[IO.File]::WriteAllText($infoPath, ($info -join "`r`n") + "`r`n`r`n", [Text.Encoding]::Unicode)
 $written += $infoPath
+
+# The picture the Mods menu shows beside the map: the first Thumbnail image next to Map.ini.
+$thumbnail = Get-ChildItem -LiteralPath $ProjectDir -File |
+    Where-Object { $_.BaseName -eq 'Thumbnail' -and $_.Extension -in '.png', '.jpg', '.jpeg', '.bmp' } |
+    Select-Object -First 1
+if ($thumbnail)
+{
+    $thumbPath = Join-Path $outDir $thumbnail.Name
+    Copy-Item -LiteralPath $thumbnail.FullName -Destination $thumbPath -Force
+    $written += $thumbPath
+}
 
 [IO.File]::WriteAllText($record, ($written -join "`r`n"))
 
@@ -843,5 +851,13 @@ if ($texts.Count -gt 0)
     Write-Host "  Text in $locRoot"
 }
 Write-Host "  map.ini: $shownName, $(if ($settings.Menu) { "its own menu ($($settings.Menu))" } else { "the game's menu" })$(if ($start) { ", New Game at $start" })"
-Write-Host "  To play it, copy this folder into Outlast\OLGame\Mods\Maps, then switch the map on in the Mods menu." -ForegroundColor DarkGray
+if ($thumbnail)
+{
+    Write-Host "  Thumbnail: $($thumbnail.Name)"
+}
+else
+{
+    Write-Host "  No thumbnail. Put a Thumbnail.png or Thumbnail.jpg next to Map.ini to show one in the Mods menu." -ForegroundColor DarkGray
+}
+Write-Host "  To play it, copy this folder into Outlast\OLGame\Mods\_Maps, then load the map from the Maps tab of the Mods menu." -ForegroundColor DarkGray
 exit 0

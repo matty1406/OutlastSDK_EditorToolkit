@@ -20,7 +20,7 @@ Checkpoints=
 
 ; Where Cook.bat puts the finished files. Leave it empty for Output\__MAPNAME__ next to Cook.bat,
 ; or name any other folder. A folder inside OLGame\Content is refused, since the editor would
-; find the copies. To play the map, copy the output folder into Outlast\OLGame\Mods\Maps.
+; find the copies. To play the map, copy the output folder into Outlast\OLGame\Mods\_Maps.
 Output=
 
 ; The maps to cook, separated by commas. Leave it empty to cook every map in

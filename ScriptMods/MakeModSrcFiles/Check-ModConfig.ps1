@@ -355,10 +355,10 @@ function Read-Ini([string] $Path)
     return $ini
 }
 
-# CRLF text with no trailing newline, in ASCII when it fits and UTF-16 otherwise: the two encodings the engine reads.
+# CRLF text ending in a blank line, as the engine writes its inis, in ASCII when it fits and UTF-16 otherwise: the two encodings the engine reads.
 function Write-IniFile([string] $Path, [string] $Text)
 {
-    $Text = ($Text -replace '\r?\n', "`r`n").TrimEnd()
+    $Text = ($Text -replace '\r?\n', "`r`n").TrimEnd() + "`r`n`r`n"
     $encoding = [Text.Encoding]::ASCII
     if ($Text -match '[^\x00-\x7F]')
     {

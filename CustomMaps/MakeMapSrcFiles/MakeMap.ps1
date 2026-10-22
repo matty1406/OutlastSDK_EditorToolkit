@@ -90,6 +90,12 @@ foreach ($template in $templates)
     # and the .ini too, as Windows files.
     $body = $body -replace '\r?\n', "`r`n"
 
+    # An ini ends the way the engine writes them, with a blank line after its last section.
+    if ($template.To -like '*.ini')
+    {
+        $body = $body.TrimEnd() + "`r`n`r`n"
+    }
+
     Set-Content -Path (Join-Path $projectDir $template.To) -Value $body -Encoding ASCII -NoNewline
     Write-Host "  created  CustomMaps\$name\$($template.To)"
 }

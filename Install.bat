@@ -44,6 +44,14 @@ if exist "%TK%ScriptMods\OutlastSDK\OutlastSDK.u" (
     echo   OLGame\Script\OutlastSDK.u  ^(prebuilt^)
 )
 
+rem The SDK's own content, which the SDK package refers to, so the editor can load it cleanly.
+rem /XO never replaces a newer copy, so edits made in the editor are kept.
+if exist "%TK%ScriptMods\OutlastSDK\OutlastSDKContent.upk" (
+    robocopy "%TK%ScriptMods\OutlastSDK" "%ROOT%\OLGame\Content\OutlastSDK" OutlastSDKContent.upk /XO > nul
+    if ERRORLEVEL 8 goto Failed
+    echo   OLGame\Content\OutlastSDK\OutlastSDKContent.upk
+)
+
 echo.
 echo [CustomMaps]
 copy /Y "%TK%CustomMaps\MakeMap.bat" "%ROOT%\" > nul

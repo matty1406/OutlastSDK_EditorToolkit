@@ -57,13 +57,14 @@ Set the `SDKMod*` defaults for the name, version and author, and put your setup 
 
 ### The OutlastSDK package
 
-`ScriptMods\OutlastSDK\` holds the two classes your mod compiles against:
+`ScriptMods\OutlastSDK\` holds the classes your mod compiles against:
 
 - **`SDKModManifest`** - the manifest base class described above.
 - **`OutlastSDKLibrary`** - file reading and writing, level streaming, reflection, mod management and class swapping. Things UnrealScript genuinely cannot do. Every function is a stub the SDK rebinds to C++ at runtime, so call them like any other static: `class'OutlastSDKLibrary'.static.SDK_WriteFile(Path, Data)`.
+- **`OutlastSDKAssets`** - the SDK's own icons and other content, always loaded while the SDK is, so any mod or map can use them: `class'OutlastSDKAssets'.default.DefaultMapIcon`.
 - **`SDKModLibrary`** - a third class that ships here but is optional - it only matters for the uncommon case of a C++ mod exposing its own natives to its script half. Ignore it otherwise.
 
-Both the sources and a prebuilt `OutlastSDK.u` ship here. `Install.bat` puts the sources in the compile tree and the `.u` in `OLGame\Script\`, so your first mod compiles without rebuilding the SDK first. Edit the sources and recompile whenever you want to change it.
+Both the sources and a prebuilt `OutlastSDK.u` ship here, along with `OutlastSDKContent.upk`, the SDK's own content. `Install.bat` puts the sources in the compile tree, the `.u` in `OLGame\Script\` and the content in `OLGame\Content\OutlastSDK\`, so your mods compile against them.
 
 ## Quick start: map
 
@@ -83,7 +84,9 @@ A map is usually a campaign, and `Map.ini` says how it starts. `Menu` is the lev
 
 New text for your maps (tutorials, objectives, prompts, items, checkpoint names, documents) goes in `OLGame\Localization` as usual, where the editor shows it, or in `CustomMaps\<Name>\Localization`. The cook ships the text retail lacks, in `Localization\` inside the output: all of your project's own, and from `OLGame\Localization` only the keys your maps use.
 
-To play it, copy the output folder into `Outlast\OLGame\Mods\Maps\` and switch the map on in the Mods menu. Cook.bat never installs into the game itself, the same as the mod tools.
+Put a `Thumbnail.png` or `Thumbnail.jpg` next to `Map.ini` and the cook ships it, so the Mods menu shows it beside your map. It is shown square, so any other shape is cropped to its centre.
+
+To play it, copy the output folder into `Outlast\OLGame\Mods\_Maps\` and load the map from the Maps tab of the Mods menu. Cook.bat never installs into the game itself, the same as the mod tools.
 
 ## Quick start: C++ mod
 
